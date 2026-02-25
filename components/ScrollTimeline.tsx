@@ -105,11 +105,11 @@ export function ScrollTimeline() {
               {/* Vertical Line Background */}
               <div className="absolute left-0 top-0 bottom-0 w-1 bg-border" />
 
-              {/* Progress Line */}
+              {/* Progress Line - starts from top and extends down based on scroll */}
               <motion.div
-                className="absolute left-0 top-0 w-1 bg-accent"
+                className="absolute left-0 top-0 w-1 bg-accent origin-top"
                 style={{
-                  height: `${progress * 100}%`,
+                  height: `${Math.max(2, progress * 100)}%`,
                 }}
                 transition={
                   prefersReducedMotion ? { type: 'tween', duration: 0 } : { type: 'spring', damping: 30, stiffness: 100 }
@@ -117,7 +117,7 @@ export function ScrollTimeline() {
               />
 
               {/* Steps with Content */}
-              <div className="space-y-16 pl-8">
+              <div className="space-y-16 pl-8 relative">
                 {processSteps.map((step, idx) => (
                   <motion.div
                     key={step.id}
@@ -128,10 +128,10 @@ export function ScrollTimeline() {
                       delay: prefersReducedMotion ? 0 : idx * 0.1,
                     }}
                     viewport={{ once: false }}
-                    className={`transition-all ${idx <= activeStep ? 'opacity-100' : 'opacity-40'}`}
+                    className={`transition-all relative ${idx <= activeStep ? 'opacity-100' : 'opacity-40'}`}
                   >
-                    {/* Dot */}
-                    <div className="absolute left-0 top-0 w-4 h-4 bg-background border-2 border-accent rounded-full -translate-x-1.5" />
+                    {/* Dot - positioned absolutely relative to the step container */}
+                    <div className="absolute left-0 top-0 w-4 h-4 bg-background border-2 border-accent rounded-full -translate-x-1.5 -translate-y-1/2" />
 
                     {/* Content Card */}
                     <div className="p-6 rounded-xl bg-card border border-border hover:border-accent/50 transition-colors">
