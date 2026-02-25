@@ -100,7 +100,7 @@ export function ScrollTimeline() {
               ))}
             </div>
 
-            {/* Right: Timeline Visualization */}
+            {/* Right: Timeline Visualization with Dots */}
             <div className="relative">
               {/* Vertical Line Background */}
               <div className="absolute left-0 top-0 bottom-0 w-1 bg-border" />
@@ -116,6 +116,28 @@ export function ScrollTimeline() {
                 }
               />
 
+              {/* Timeline Dots */}
+              <div className="absolute left-0 top-0 w-full h-full pointer-events-none">
+                {processSteps.map((step, idx) => (
+                  <motion.div
+                    key={`dot-${step.id}`}
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    whileInView={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: prefersReducedMotion ? 0 : 0.3 }}
+                    viewport={{ once: false }}
+                    style={{
+                      top: `${(idx / processSteps.length) * 100}%`,
+                      left: 0,
+                    }}
+                    className={`absolute w-5 h-5 rounded-full border-2 -translate-x-2 -translate-y-1/2 transition-all ${
+                      idx <= activeStep
+                        ? 'bg-accent border-accent'
+                        : 'bg-background border-accent'
+                    }`}
+                  />
+                ))}
+              </div>
+
               {/* Steps with Content */}
               <div className="space-y-16 pl-8 relative">
                 {processSteps.map((step, idx) => (
@@ -128,26 +150,35 @@ export function ScrollTimeline() {
                       delay: prefersReducedMotion ? 0 : idx * 0.1,
                     }}
                     viewport={{ once: false }}
-                    className={`transition-all relative ${idx <= activeStep ? 'opacity-100' : 'opacity-40'}`}
+                    className={`transition-all relative ${idx <= activeStep ? 'opacity-100' : 'opacity-50'}`}
                   >
-                    {/* Dot - positioned absolutely relative to the step container */}
-                    <div className="absolute left-0 top-0 w-4 h-4 bg-background border-2 border-accent rounded-full -translate-x-1.5 -translate-y-1/2" />
-
                     {/* Content Card */}
-                    <div className="p-6 rounded-xl bg-card border border-border hover:border-accent/50 transition-colors">
+                    <motion.div
+                      animate={{
+                        borderColor: idx <= activeStep ? 'var(--accent)' : 'var(--border)',
+                      }}
+                      className="p-6 rounded-xl bg-card border border-border hover:border-accent/50 transition-colors"
+                    >
                       <h4 className="text-xl font-bold text-foreground mb-2">{step.title}</h4>
                       <p className="text-muted-foreground mb-4">{step.description}</p>
 
                       {/* Details */}
                       <div className="space-y-2">
                         {step.details.map((detail, i) => (
-                          <div key={i} className="flex items-start gap-3 text-sm text-muted-foreground">
+                          <motion.div
+                            key={i}
+                            initial={{ opacity: 0, x: -10 }}
+                            whileInView={{ opacity: 1, x: 0 }}
+                            transition={{ delay: prefersReducedMotion ? 0 : 0.1 + i * 0.05 }}
+                            viewport={{ once: false }}
+                            className="flex items-start gap-3 text-sm text-muted-foreground"
+                          >
                             <span className="text-accent font-bold flex-shrink-0">→</span>
                             <span>{detail}</span>
-                          </div>
+                          </motion.div>
                         ))}
                       </div>
-                    </div>
+                    </motion.div>
                   </motion.div>
                 ))}
               </div>
