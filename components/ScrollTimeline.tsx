@@ -1,56 +1,87 @@
 'use client';
 
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { processSteps, type ProcessStep } from '@/lib/data/process';
 import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
 
 export function ScrollTimeline() {
   const containerRef = useRef<HTMLDivElement>(null);
+  const panelRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const lineRef = useRef<HTMLDivElement>(null);
   const [activeStep, setActiveStep] = useState(0);
   const [progress, setProgress] = useState(0);
   const prefersReducedMotion = usePrefersReducedMotion();
 
-  useEffect(() => {
-    const handleScroll = () => {
-      if (!containerRef.current) return;
+  // Update progress based on scroll position
+  const updateProgress = useCallback(() => {
+    if (!containerRef.current) return;
 
-      const rect = containerRef.current.getBoundingClientRect();
-      const containerTop = rect.top;
-      const containerHeight = rect.height;
-      const windowHeight = window.innerHeight;
+    const firstPanel = panelRefs.current[0];
+    const lastPanel = panelRefs.current[panelRefs.current.length - 1];
 
-      // Calculate progress
-      const scrollProgress = Math.max(
-        0,
-        Math.min(1, (windowHeight / 2 - containerTop) / (containerHeight - windowHeight / 2))
-      );
-      setProgress(scrollProgress);
+    if (!firstPanel || !lastPanel) return;
 
-      // Determine active step based on scroll position
-      const stepsCount = processSteps.length;
-      const calculatedStep = Math.floor(scrollProgress * stepsCount);
-      setActiveStep(Math.min(calculatedStep, stepsCount - 1));
-    };
+    const firstRect = firstPanel.getBoundingClientRect();
+    const lastRect = lastPanel.getBoundingClientRect();
 
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
+    // Calculate progress from first panel top to last panel bottom
+    const startPos = firstRect.top;
+    const endPos = lastRect.bottom;
+    const totalDistance = endPos - startPos;
+
+    const viewportCenter = window.innerHeight / 2;
+    const scrolled = viewportCenter - startPos;
+
+    const calculatedProgress = Math.max(0, Math.min(1, scrolled / totalDistance));
+    setProgress(calculatedProgress);
   }, []);
 
-  const getStepVariants = (index: number, isActive: boolean) => ({
-    hidden: {
-      opacity: 0,
-      x: prefersReducedMotion ? 0 : -30,
-    },
-    visible: {
-      opacity: isActive ? 1 : 0.5,
-      x: 0,
-      transition: {
-        duration: prefersReducedMotion ? 0 : 0.5,
-        delay: prefersReducedMotion ? 0 : index * 0.1,
+  // IntersectionObserver to detect active panel
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        let maxRatio = -1;
+        let maxIndex = 0;
+
+        entries.forEach((entry) => {
+          const index = panelRefs.current.indexOf(entry.target as HTMLDivElement);
+          if (entry.intersectionRatio > maxRatio) {
+            maxRatio = entry.intersectionRatio;
+            maxIndex = index;
+          }
+        });
+
+        if (maxRatio > 0) {
+          setActiveStep(maxIndex);
+        }
       },
-    },
-  });
+      {
+        threshold: 0,
+        rootMargin: '-40% 0px -50% 0px',
+      }
+    );
+
+    panelRefs.current.forEach((ref) => {
+      if (ref) observer.observe(ref);
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  // Scroll listener for progress calculation
+  useEffect(() => {
+    window.addEventListener('scroll', updateProgress, { passive: true });
+    updateProgress();
+    return () => window.removeEventListener('scroll', updateProgress);
+  }, [updateProgress]);
+
+  const scrollToStep = (index: number) => {
+    const panel = panelRefs.current[index];
+    if (panel) {
+      panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
 
   return (
     <section id="process" className="relative py-24 px-4 overflow-hidden">
@@ -69,116 +100,144 @@ export function ScrollTimeline() {
         </motion.div>
 
         <div ref={containerRef} className="relative">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-8">
-            {/* Left: Steps */}
-            <div className="space-y-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-20">
+            {/* Left: Steps (Sticky) */}
+            <div className="md:sticky md:top-20 md:h-fit space-y-12">
               {processSteps.map((step, idx) => (
-                <motion.div
+                <button
                   key={step.id}
-                  variants={getStepVariants(idx, idx === activeStep)}
-                  initial="hidden"
-                  whileInView="visible"
-                  viewport={{ once: false }}
-                  className={`transition-all ${idx === activeStep ? 'opacity-100' : 'opacity-60'}`}
+                  onClick={() => scrollToStep(idx)}
+                  className="w-full text-left group"
                 >
-                  <div className="flex items-start gap-4">
-                    <div
-                      className={`mt-1 w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all ${
-                        idx === activeStep
-                          ? 'bg-accent text-accent-foreground'
-                          : 'bg-secondary text-muted-foreground'
-                      }`}
-                    >
-                      {idx + 1}
+                  <motion.div
+                    animate={{
+                      opacity: idx === activeStep ? 1 : 0.5,
+                      x: idx === activeStep ? 4 : 0,
+                    }}
+                    transition={{ duration: prefersReducedMotion ? 0 : 0.3 }}
+                    className="transition-all"
+                  >
+                    <div className="flex items-start gap-4">
+                      <div
+                        className={`mt-1 w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all flex-shrink-0 ${
+                          idx === activeStep
+                            ? 'bg-accent text-accent-foreground ring-2 ring-accent ring-offset-2'
+                            : 'bg-secondary text-muted-foreground group-hover:bg-muted'
+                        }`}
+                      >
+                        {idx + 1}
+                      </div>
+                      <div>
+                        <h3 className={`font-bold transition-colors ${idx === activeStep ? 'text-foreground' : 'text-muted-foreground'}`}>
+                          {step.label}
+                        </h3>
+                        <p className="text-muted-foreground text-sm">{step.title}</p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="text-lg font-bold text-foreground mb-2">{step.label}</h3>
-                      <p className="text-muted-foreground text-sm">{step.title}</p>
-                    </div>
-                  </div>
-                </motion.div>
+                  </motion.div>
+                </button>
               ))}
             </div>
 
-            {/* Right: Timeline Visualization with Dots */}
+            {/* Right: Timeline & Content */}
             <div className="relative">
-              {/* Vertical Line Background */}
-              <div className="absolute left-0 top-0 bottom-0 w-1 bg-border" />
+              {/* Vertical Line Container */}
+              <div className="absolute -left-6 top-0 bottom-0 w-1 bg-border" />
 
-              {/* Progress Line - starts from top and extends down based on scroll */}
+              {/* Progress Line */}
               <motion.div
-                className="absolute left-0 top-0 w-1 bg-accent origin-top"
+                ref={lineRef}
+                className="absolute -left-6 top-0 w-1 bg-accent origin-top"
                 style={{
-                  height: `${Math.max(2, progress * 100)}%`,
+                  height: `${Math.max(1, progress * 100)}%`,
                 }}
                 transition={
-                  prefersReducedMotion ? { type: 'tween', duration: 0 } : { type: 'spring', damping: 30, stiffness: 100 }
+                  prefersReducedMotion
+                    ? { duration: 0 }
+                    : { type: 'spring', damping: 40, stiffness: 100 }
                 }
               />
 
-              {/* Timeline Dots */}
-              <div className="absolute left-0 top-0 w-full h-full pointer-events-none">
-                {processSteps.map((step, idx) => (
-                  <motion.div
-                    key={`dot-${step.id}`}
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    whileInView={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: prefersReducedMotion ? 0 : 0.3 }}
-                    viewport={{ once: false }}
-                    style={{
-                      top: `${(idx / processSteps.length) * 100}%`,
-                      left: 0,
-                    }}
-                    className={`absolute w-5 h-5 rounded-full border-2 -translate-x-2 -translate-y-1/2 transition-all ${
-                      idx <= activeStep
-                        ? 'bg-accent border-accent'
-                        : 'bg-background border-accent'
-                    }`}
-                  />
-                ))}
+              {/* Timeline Dots (Aligned with Steps) */}
+              <div className="absolute -left-6 top-0 pointer-events-none w-12 h-full">
+                {processSteps.map((step, idx) => {
+                  const panelElement = panelRefs.current[idx];
+                  if (!panelElement) return null;
+
+                  return (
+                    <div
+                      key={`dot-${step.id}`}
+                      className="absolute left-0 w-full"
+                      style={{
+                        top: panelElement ? `${(panelElement as any).offsetTop}px` : 'auto',
+                      }}
+                    >
+                      <motion.div
+                        animate={{
+                          scale: idx <= activeStep ? 1.2 : 1,
+                          boxShadow:
+                            idx <= activeStep
+                              ? '0 0 12px rgba(167, 139, 250, 0.5)'
+                              : 'none',
+                        }}
+                        className={`absolute left-1/2 top-0 w-5 h-5 rounded-full border-2 -translate-x-1/2 -translate-y-1/2 transition-all ${
+                          idx <= activeStep
+                            ? 'bg-accent border-accent'
+                            : 'bg-background border-accent'
+                        }`}
+                      />
+                    </div>
+                  );
+                })}
               </div>
 
-              {/* Steps with Content */}
-              <div className="space-y-16 pl-8 relative">
+              {/* Content Panels */}
+              <div className="space-y-32 relative">
                 {processSteps.map((step, idx) => (
                   <motion.div
                     key={step.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    transition={{
-                      duration: prefersReducedMotion ? 0 : 0.5,
-                      delay: prefersReducedMotion ? 0 : idx * 0.1,
+                    ref={(el) => {
+                      if (el) panelRefs.current[idx] = el;
                     }}
-                    viewport={{ once: false }}
-                    className={`transition-all relative ${idx <= activeStep ? 'opacity-100' : 'opacity-50'}`}
+                    animate={{
+                      opacity: idx === activeStep ? 1 : 0.6,
+                      y: idx === activeStep ? 0 : 8,
+                    }}
+                    transition={{
+                      duration: prefersReducedMotion ? 0 : 0.4,
+                      ease: 'easeOut',
+                    }}
+                    className="scroll-mt-24"
                   >
                     {/* Content Card */}
-                    <motion.div
-                      animate={{
-                        borderColor: idx <= activeStep ? 'var(--accent)' : 'var(--border)',
+                    <div className="p-6 rounded-xl bg-card border-2 transition-colors will-change-auto"
+                      style={{
+                        borderColor: idx === activeStep ? 'var(--accent)' : 'var(--border)',
                       }}
-                      className="p-6 rounded-xl bg-card border border-border hover:border-accent/50 transition-colors"
                     >
                       <h4 className="text-xl font-bold text-foreground mb-2">{step.title}</h4>
-                      <p className="text-muted-foreground mb-4">{step.description}</p>
+                      <p className="text-muted-foreground mb-6">{step.description}</p>
 
                       {/* Details */}
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         {step.details.map((detail, i) => (
                           <motion.div
                             key={i}
-                            initial={{ opacity: 0, x: -10 }}
+                            initial={{ opacity: 0, x: -8 }}
                             whileInView={{ opacity: 1, x: 0 }}
-                            transition={{ delay: prefersReducedMotion ? 0 : 0.1 + i * 0.05 }}
+                            transition={{
+                              duration: prefersReducedMotion ? 0 : 0.3,
+                              delay: prefersReducedMotion ? 0 : i * 0.05,
+                            }}
                             viewport={{ once: false }}
                             className="flex items-start gap-3 text-sm text-muted-foreground"
                           >
-                            <span className="text-accent font-bold flex-shrink-0">→</span>
+                            <span className="text-accent font-bold flex-shrink-0 mt-0.5">→</span>
                             <span>{detail}</span>
                           </motion.div>
                         ))}
                       </div>
-                    </motion.div>
+                    </div>
                   </motion.div>
                 ))}
               </div>
@@ -187,31 +246,63 @@ export function ScrollTimeline() {
 
           {/* Mobile Timeline */}
           <div className="md:hidden mt-12">
-            <div className="space-y-8">
+            <div className="space-y-16 pl-12 relative">
+              {/* Mobile Timeline Line */}
+              <div className="absolute left-1.5 top-0 bottom-0 w-1 bg-border" />
+              <motion.div
+                className="absolute left-1.5 top-0 w-1 bg-accent origin-top"
+                style={{
+                  height: `${Math.max(1, progress * 100)}%`,
+                }}
+                transition={
+                  prefersReducedMotion ? { duration: 0 } : { type: 'spring', damping: 40, stiffness: 100 }
+                }
+              />
+
               {processSteps.map((step, idx) => (
                 <motion.div
                   key={step.id}
+                  ref={(el) => {
+                    if (el && !panelRefs.current[idx]) panelRefs.current[idx] = el;
+                  }}
                   initial={{ opacity: 0, y: 20 }}
                   whileInView={{ opacity: 1, y: 0 }}
-                  transition={{ duration: prefersReducedMotion ? 0 : 0.5, delay: prefersReducedMotion ? 0 : idx * 0.1 }}
-                  className="relative pl-12"
+                  transition={{
+                    duration: prefersReducedMotion ? 0 : 0.5,
+                    delay: prefersReducedMotion ? 0 : idx * 0.1,
+                  }}
+                  viewport={{ once: false }}
+                  className="relative"
                 >
                   {/* Timeline Dot */}
-                  <div className="absolute left-0 top-0 w-3 h-3 bg-accent rounded-full" />
-                  {idx < processSteps.length - 1 && (
-                    <div className="absolute left-1 top-3 w-0.5 h-12 bg-border" />
-                  )}
+                  <motion.div
+                    animate={{
+                      scale: idx <= activeStep ? 1.3 : 1,
+                    }}
+                    className={`absolute -left-10 top-0 w-4 h-4 rounded-full border-2 transition-all ${
+                      idx <= activeStep
+                        ? 'bg-accent border-accent'
+                        : 'bg-background border-accent'
+                    }`}
+                  />
 
                   {/* Content */}
-                  <div className="p-4 rounded-lg bg-secondary">
-                    <h4 className="text-lg font-bold text-foreground mb-2">
+                  <div className={`p-4 rounded-lg border transition-all ${
+                    idx === activeStep
+                      ? 'bg-card border-accent'
+                      : 'bg-secondary border-border'
+                  }`}>
+                    <h4 className="text-base font-bold text-foreground mb-2">
                       {step.label} — {step.title}
                     </h4>
                     <p className="text-muted-foreground text-sm mb-3">{step.description}</p>
                     <div className="space-y-2">
-                      {step.details.slice(0, 2).map((detail, i) => (
-                        <div key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
-                          <span className="text-accent flex-shrink-0">•</span>
+                      {step.details.slice(0, 3).map((detail, i) => (
+                        <div
+                          key={i}
+                          className="flex items-start gap-2 text-xs text-muted-foreground"
+                        >
+                          <span className="text-accent flex-shrink-0 mt-0.5">→</span>
                           <span>{detail}</span>
                         </div>
                       ))}
